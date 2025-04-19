@@ -1,46 +1,22 @@
 const express = require('express');
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-
-// Import routes
-const userRoutes = require('./routes/userRoutes');
-
-// Import middleware
-const { notFound, errorHandler } = require('./middleware/errorMiddleware');
-
-// Load environment variables
-dotenv.config();
-
-// Create Express app
 const app = express();
+const connectToDb = require('./config/db');
+const cors = require('cors');
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const registrationRoutes = require('./routes/registration');
+const eventRoutes = require('./routes/event');
 
-// Connect to MongoDB
-require('./config/db')();
-
-// Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(cors());
-app.use(helmet());
-app.use(morgan('dev'));
+connectToDb();
 
-// Routes
-app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/registration', registrationRoutes);
+app.use('/api/event', eventRoutes);
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Welcome to Halcyon API');
-});
+app.listen(process.env.PORT, () => {
+  console.log(`Server is running on port ${process.env.PORT}`);
+})
 
-// Error handling middleware
-app.use(notFound);
-app.use(errorHandler);
-
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
