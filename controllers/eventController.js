@@ -2,7 +2,7 @@ const Event = require('../models/eventModel');
 
 const createEvent = async (req, res) => {
     try {
-        const { name, description, date, venue, rules, prizes, coordinators, day } = req.body;
+        const { name, description, date, venue, rules, prizes, coordinators, day, category } = req.body;
         const event = await Event.create({
             name,
             description,
@@ -12,6 +12,7 @@ const createEvent = async (req, res) => {
             prizes: prizes || [],
             coordinators: coordinators || [],
             day: day || 1, // Default to Day 1 if not specified
+            category: category || 'other', // Default to 'other' if not specified
             managedBy: req.user._id
         });
         res.status(201).json(event);

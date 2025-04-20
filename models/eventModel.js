@@ -12,6 +12,9 @@ const eventSchema = new mongoose.Schema({
         name: String,
         phone: String
     }],
+    teamSize: Number,
+    
+    category: String,
     day: { type: Number, enum: [1, 2], default: 1 } // 1 for Day 1, 2 for Day 2
 }, { timestamp: true });
 module.exports = mongoose.model('Event', eventSchema);

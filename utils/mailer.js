@@ -43,6 +43,6 @@ const sendConfirmationEmail = async(email, eventName) => {
         throw err;
     }
 };
-
 module.exports = sendConfirmationEmail;
+
 
