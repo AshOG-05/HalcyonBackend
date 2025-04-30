@@ -11,15 +11,12 @@ const generateToken = (user) => {
 
 const register = async (req, res) => {
     try {
-        const { name, email, password, mobile, role } = req.body;
+        const { name, email, password, role } = req.body;
 
         const existingEmail = await User.findOne({ email });
         if (existingEmail) return res.status(400).json({ error: 'User already exists' });
 
-        const existingMobile = await User.findOne({ mobile });
-        if (existingMobile) return res.status(400).json({ error: 'Phone number already registered' });
-
-        const user = new User({ name, email, password, mobile, role });
+        const user = new User({ name, email, password, role });
         await user.save();
 
         res.status(201).json({

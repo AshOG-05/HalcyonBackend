@@ -1,8 +1,7 @@
 const User = require('../models/userModel');
 const Registration = require('../models/registrationModel');
 const Event = require('../models/eventModel');
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
+const pdf = require('html-pdf');
 
 const getAllUsers = async (req, res) => {
     try {
@@ -15,7 +14,7 @@ const getAllUsers = async (req, res) => {
 const getAllRegistrations = async (req, res) => {
     try {
         const registrations = await Registration.find()
-            .populate('participant', 'name email mobile')
+            .populate('participant', 'name email')
             .populate('event', 'name date venue category day');
         return res.json(registrations);
     } catch (err) {
@@ -40,51 +39,131 @@ const assignTeamMember = async (req, res) => {
 
 const generatePdf = async (req, res) => {
     try {
-        const { eventName } = req.params;
-        const registrations = await Registration.find({ event:eventName });
-        const doc = new PDFDocument({ margin: 30 });
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${eventName}_registrations.pdf`);
-        doc.pipe(res);
+        const fs = require('fs');
+        const path = require('path');
+        const Handlebars = require('handlebars');
 
-        // Header
-        doc.fontSize(20).text('HALCYON 2025', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(16).text('REGISTRATION', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(12).text(`Event Name: ${eventName}`);
-        doc.moveDown(1);
+        // Get registrations with more detailed information
+        const registrations = await Registration.find()
+            .populate({
+                path: 'participant',
+                select: 'name email',
+                model: 'User'
+            })
+            .populate({
+                path: 'event',
+                select: 'name category day venue date',
+                model: 'Event'
+            });
 
-        // Table headers
-        const tableTop = doc.y;
-        const rowHeight = 20;
-        const colWidths = [50, 100, 200, 100];
+        // Group registrations by event for better organization
+        const eventGroups = {};
+        registrations.forEach(reg => {
+            if (reg.event) {
+                const eventId = reg.event._id.toString();
+                if (!eventGroups[eventId]) {
+                    const category = reg.event.category || 'other';
+                    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+                    const eventDate = new Date(reg.event.date);
+                    const formattedDate = eventDate.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
 
-        const drawRow = (y, row) => {
-            doc.text(row[0], 40, y);
-            doc.text(row[1], 100, y);
-            doc.text(row[2], 200, y);
-            doc.text(row[3], 420, y);
-        };
+                    eventGroups[eventId] = {
+                        event: reg.event,
+                        categoryName: categoryName,
+                        formattedDate: formattedDate,
+                        registrations: []
+                    };
+                }
 
-        // Header row
-        drawRow(tableTop, ['Sl. No.', 'College Code', 'Name', 'Contact No.']);
-        doc.moveDown();
+                // Format registration date
+                const formattedRegistrationDate = new Date(reg.registeredAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
 
-        // Data rows
-        registrations.forEach((reg, index) => {
-            const y = tableTop + rowHeight * (index + 1);
-            drawRow(y, [
-                index + 1,
-                reg.collegeCode || 'N/A',
-                reg.name || 'N/A',
-                reg.contactNumber || 'N/A',
-            ]);
+                // Add registration to the event group with index
+                eventGroups[eventId].registrations.push({
+                    ...reg.toObject(),
+                    index: eventGroups[eventId].registrations.length + 1,
+                    formattedRegistrationDate: formattedRegistrationDate
+                });
+            }
         });
 
-        doc.end();
+        // Convert to array and sort by event name
+        const eventGroupsArray = Object.values(eventGroups).sort((a, b) =>
+            a.event.name.localeCompare(b.event.name)
+        );
+
+        // Get total registrations and events
+        const totalRegistrations = registrations.length;
+        const totalEvents = eventGroupsArray.length;
+
+        // Find max registrations per event
+        const maxRegistrationsPerEvent = eventGroupsArray.reduce((max, group) =>
+            Math.max(max, group.registrations.length), 0);
+
+        // Format current date for header
+        const currentDate = new Date();
+        const formattedDate = currentDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // Read the HTML template
+        const templatePath = path.join(__dirname, '../templates/registration-report.html');
+        const templateSource = fs.readFileSync(templatePath, 'utf8');
+
+        // Compile the template
+        const template = Handlebars.compile(templateSource);
+
+        // Prepare data for the template
+        const data = {
+            formattedDate,
+            totalRegistrations,
+            totalEvents,
+            maxRegistrationsPerEvent,
+            eventGroups: eventGroupsArray
+        };
+
+        // Generate HTML content
+        const htmlContent = template(data);
+        const options = {
+            format: 'A4',
+            orientation: 'landscape',
+            border: {
+                top: '15mm',
+                right: '15mm',
+                bottom: '15mm',
+                left: '15mm'
+            },
+            footer: {
+                height: '10mm',
+                contents: {
+                    default: '<div style="text-align: center; font-size: 8px; color: #888;">Page {{page}} of {{pages}}</div>'
+                }
+            },
+            timeout: 30000
+        };
+        pdf.create(htmlContent, options).toBuffer((err, buffer) => {
+            if (err) return res.status(500).json({ error: err.message });
+            // Format date for filename
+            const dateForFilename = currentDate.toISOString().split('T')[0];
+            const filename = `halcyon_registrations_${dateForFilename}.pdf`;
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+            res.send(buffer);
+        });
     } catch (err) {
-        console.error('Error generating PDF:', err);
         res.status(500).json({ error: err.message });
     }
 };
