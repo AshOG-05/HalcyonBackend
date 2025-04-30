@@ -1,7 +1,8 @@
 const User = require('../models/userModel');
 const Registration = require('../models/registrationModel');
 const Event = require('../models/eventModel');
-const pdf = require('html-pdf');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
 
 const getAllUsers = async (req, res) => {
     try {
@@ -11,11 +12,10 @@ const getAllUsers = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 }
-
 const getAllRegistrations = async (req, res) => {
     try {
         const registrations = await Registration.find()
-            .populate('participant', 'name email')
+            .populate('participant', 'name email mobile')
             .populate('event', 'name date venue category day');
         return res.json(registrations);
     } catch (err) {
@@ -40,84 +40,51 @@ const assignTeamMember = async (req, res) => {
 
 const generatePdf = async (req, res) => {
     try {
-        const registrations = await Registration.find()
-            .populate({
-                path: 'participant',
-                select: 'name email',
-                model: 'User'
-            })
-            .populate({
-                path: 'event',
-                select: 'name',
-                model: 'Event'
-            });
-        const htmlContent = `
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; font-size: 10px; }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 10px;
-                    }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 5px;
-                        text-align: left;
-                    }
-                    th { background-color: #f2f2f2; }
-                    h2 {
-                        font-size: 14px;
-                        margin: 5px 0;
-                        text-align: center;
-                    }
-                </style>
-            </head>
-            <body>
-                <h2>Halcyon Event Registrations</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Event</th>
-                            <th>Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${registrations.map(reg => `
-                            <tr>
-                                <td>${reg.participant?.name || 'N/A'}</td>
-                                <td>${reg.participant?.email || 'N/A'}</td>
-                                <td>${reg.event?.name || 'N/A'}</td>
-                                <td>${new Date(reg.registeredAt).toLocaleDateString()}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                <div style="margin-top: 10px; text-align: right; font-size: 8px;">
-                    Generated: ${new Date().toLocaleDateString()}
-                </div>
-            </body>
-            </html>
-            `;
-        const options = {
-            format: 'A4',
-            border: {
-                top: '20px',
-                right: '20px',
-                bottom: '20px',
-                left: '20px'
-            }
+        const { eventName } = req.params;
+        const registrations = await Registration.find({ event:eventName });
+        const doc = new PDFDocument({ margin: 30 });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${eventName}_registrations.pdf`);
+        doc.pipe(res);
+
+        // Header
+        doc.fontSize(20).text('HALCYON 2025', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(16).text('REGISTRATION', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Event Name: ${eventName}`);
+        doc.moveDown(1);
+
+        // Table headers
+        const tableTop = doc.y;
+        const rowHeight = 20;
+        const colWidths = [50, 100, 200, 100];
+
+        const drawRow = (y, row) => {
+            doc.text(row[0], 40, y);
+            doc.text(row[1], 100, y);
+            doc.text(row[2], 200, y);
+            doc.text(row[3], 420, y);
         };
-        pdf.create(htmlContent, options).toBuffer((err, buffer) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', 'attachment; filename=registration.pdf');
-            res.send(buffer);
+
+        // Header row
+        drawRow(tableTop, ['Sl. No.', 'College Code', 'Name', 'Contact No.']);
+        doc.moveDown();
+
+        // Data rows
+        registrations.forEach((reg, index) => {
+            const y = tableTop + rowHeight * (index + 1);
+            drawRow(y, [
+                index + 1,
+                reg.collegeCode || 'N/A',
+                reg.name || 'N/A',
+                reg.contactNumber || 'N/A',
+            ]);
         });
+
+        doc.end();
     } catch (err) {
+        console.error('Error generating PDF:', err);
         res.status(500).json({ error: err.message });
     }
 };
