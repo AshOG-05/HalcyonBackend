@@ -21,7 +21,6 @@ const getAllRegistrations = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 }
-
 const assignTeamMember = async (req, res) => {
     try {
         const { eventId, userId } = req.params;
@@ -35,139 +34,121 @@ const assignTeamMember = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
-
-
 const generatePdf = async (req, res) => {
     try {
-        const fs = require('fs');
-        const path = require('path');
-        const Handlebars = require('handlebars');
+        const { eventID } = req.params;
+        const event = await Event.findById(eventID);
+        if (!event) return res.status(404).json({ error: "Event not found" });
+        const registrations = await Registration.find({ event: eventID })
+            .populate('participant', 'name mobile')
+            .populate('event', 'name');
+        if (!registrations) return res.status(404).json({ error: "No registrations found" });
+        const html = `
+<html>
+  <head>
+    <title>Registrations</title>
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        margin: 40px;
+        color: #000;
+      }
 
-        // Get registrations with more detailed information
-        const registrations = await Registration.find()
-            .populate({
-                path: 'participant',
-                select: 'name email',
-                model: 'User'
-            })
-            .populate({
-                path: 'event',
-                select: 'name category day venue date',
-                model: 'Event'
-            });
+      h1, h2 {
+        text-align: center;
+        margin: 0;
+        padding: 4px;
+      }
 
-        // Group registrations by event for better organization
-        const eventGroups = {};
-        registrations.forEach(reg => {
-            if (reg.event) {
-                const eventId = reg.event._id.toString();
-                if (!eventGroups[eventId]) {
-                    const category = reg.event.category || 'other';
-                    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
-                    const eventDate = new Date(reg.event.date);
-                    const formattedDate = eventDate.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    });
+      h1 {
+        font-size: 28px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
 
-                    eventGroups[eventId] = {
-                        event: reg.event,
-                        categoryName: categoryName,
-                        formattedDate: formattedDate,
-                        registrations: []
-                    };
-                }
+      h2 {
+        font-size: 20px;
+        font-weight: normal;
+        margin-bottom: 10px;
+      }
 
-                // Format registration date
-                const formattedRegistrationDate = new Date(reg.registeredAt).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 30px;
+      }
 
-                // Add registration to the event group with index
-                eventGroups[eventId].registrations.push({
-                    ...reg.toObject(),
-                    index: eventGroups[eventId].registrations.length + 1,
-                    formattedRegistrationDate: formattedRegistrationDate
-                });
-            }
-        });
+      th, td {
+        border: 1px solid #000;
+        padding: 8px 12px;
+        text-align: left;
+      }
 
-        // Convert to array and sort by event name
-        const eventGroupsArray = Object.values(eventGroups).sort((a, b) =>
-            a.event.name.localeCompare(b.event.name)
-        );
+      th {
+        background-color: #f0f0f0;
+        font-weight: bold;
+        text-align: center;
+      }
 
-        // Get total registrations and events
-        const totalRegistrations = registrations.length;
-        const totalEvents = eventGroupsArray.length;
+      td:nth-child(1), td:nth-child(4) {
+        text-align: center;
+      }
 
-        // Find max registrations per event
-        const maxRegistrationsPerEvent = eventGroupsArray.reduce((max, group) =>
-            Math.max(max, group.registrations.length), 0);
+      tr:nth-child(even) {
+        background-color: #fafafa;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Halcyon 2024</h1>
+    <h2>Registrations</h2>
+    <h2>Event: ${registrations[0].event.name}</h2>
+    <table>
+      <tr>
+        <th>Sl. No.</th>
+        <th>College Code</th>
+        <th>Name</th>
+        <th>Contact No.</th>
+      </tr>
+      ${registrations.map((registration, index) => {
+            return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${registration.participant.collegeCode || ''}</td>
+            <td>${registration.participant.name}</td>
+            <td>${registration.participant.mobile}</td>
+          </tr>`;
+        }).join('')}
+    </table>
+  </body>
+</html>
+`;
 
-        // Format current date for header
-        const currentDate = new Date();
-        const formattedDate = currentDate.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-
-        // Read the HTML template
-        const templatePath = path.join(__dirname, '../templates/registration-report.html');
-        const templateSource = fs.readFileSync(templatePath, 'utf8');
-
-        // Compile the template
-        const template = Handlebars.compile(templateSource);
-
-        // Prepare data for the template
-        const data = {
-            formattedDate,
-            totalRegistrations,
-            totalEvents,
-            maxRegistrationsPerEvent,
-            eventGroups: eventGroupsArray
-        };
-
-        // Generate HTML content
-        const htmlContent = template(data);
         const options = {
-            format: 'A4',
-            orientation: 'landscape',
+            format: "A4",
+            orientation: "portrait",
             border: {
-                top: '15mm',
-                right: '15mm',
-                bottom: '15mm',
-                left: '15mm'
+                top: "0.5in",
+                right: "0.5in",
+                bottom: "0.5in",
+                left: "0.5in"
             },
-            footer: {
-                height: '10mm',
-                contents: {
-                    default: '<div style="text-align: center; font-size: 8px; color: #888;">Page {{page}} of {{pages}}</div>'
-                }
-            },
-            timeout: 30000
+            type: "pdf",
+            quality: "100",
         };
-        pdf.create(htmlContent, options).toBuffer((err, buffer) => {
-            if (err) return res.status(500).json({ error: err.message });
-            // Format date for filename
-            const dateForFilename = currentDate.toISOString().split('T')[0];
-            const filename = `halcyon_registrations_${dateForFilename}.pdf`;
-
+        pdf.create(html, options).toBuffer((err, buffer) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: "Error generating PDF" });
+            }
             res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+            res.setHeader('Content-Disposition', 'attachment; filename=registrations.pdf');
             res.send(buffer);
-        });
+        })
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
-
 const deleteEvent = async (req, res) => {
     try {
         const eventId = req.params.id;
