@@ -1,11 +1,19 @@
 const mongoose = require('mongoose');
 
 const registrationSchema = new mongoose.Schema({
-    participant:{
+    teamName:{
+        type:String,
+        required: false,
+    },
+    teamLeader:{
         type:mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
     },
+    teamMembers:[{
+        type:String,
+        required:false,
+    }],
     event:{
         type:mongoose.Schema.Types.ObjectId,
         ref: 'Event',
@@ -21,5 +29,4 @@ const registrationSchema = new mongoose.Schema({
         default: null
     }
 },{timestamps: true});
-module.exports = mongoose.model('Registration', registrationSchema);    
-
+module.exports = mongoose.model('Registration', registrationSchema);
