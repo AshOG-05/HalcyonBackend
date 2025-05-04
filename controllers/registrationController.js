@@ -72,4 +72,5 @@ const spotRegister = async(req, res) => {
         res.status(400).json({error: err.message});
     }
 }
+
 module.exports = {registerForEvent, viewMyRegistration, spotRegister};

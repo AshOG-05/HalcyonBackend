@@ -16,13 +16,15 @@ const getAllUsers = async (req, res) => {
   }
 }
 const getAllRegistrations = async (req, res) => {
-  try {
-    const registrations = await Registration.find()
-      .populate('participant', 'name email')
-      .populate('event', 'name date venue category day');
-    return res.json(registrations);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+  try{
+    const registrattions = await Registration.find()
+      .populate('event', 'name')
+      .populate('teamLeader', 'name mobile email')
+      .populate('teamMembers', 'name mobile email');
+    if (!registrattions) return res.status(404).json({ error: "No registrations found" });
+    res.json(registrattions);
+  }catch(err){
+    res.status(500).json({ error: err.message });
   }
 }
 const assignTeamMember = async (req, res) => {
@@ -46,7 +48,7 @@ const generatePdf = async (req, res) => {
 
     // Get registrations with participant details
     const registrations = await Registration.find({ event: eventID })
-      .populate('teamLeader', 'mobile')
+      .populate('teamLeader', 'name email mobile')
       .populate('event', 'name');
 
     // Read and encode the image
@@ -151,8 +153,8 @@ const generatePdf = async (req, res) => {
     <table>
       <tr>
         <th>Sl. No.</th>
-        <th>Name</th>
-        <th>Email</th>
+        <th>Team Name</th>
+        <th>Team Leader</th>
         <th>Contact No.</th>
       </tr>
       ${registrations.length > 0 ?
@@ -161,6 +163,7 @@ const generatePdf = async (req, res) => {
             <tr>
               <td>${index + 1}</td>
               <td>${registration.teamName || 'N/A'}</td>
+              <td>${registration.teamLeader?.name || 'N/A'}</td>
               <td>${registration.teamLeader?.mobile || 'N/A'}</td>
             </tr>`;
         }).join('') :
