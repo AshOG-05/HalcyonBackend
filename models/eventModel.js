@@ -12,9 +12,17 @@ const eventSchema = new mongoose.Schema({
         name: String,
         phone: String
     }],
-    teamSize: Number,
+    teamSize: {
+        type: Number,
+        default: 1,
+    },
+    isVariableTeamSize: {
+        type: Boolean,
+        default: false,
+    },
     category: String,
-    day: { type: Number, enum: [1, 2], default: 1 } // 1 for Day 1, 2 for Day 2
+    day: { type: Number, enum: [1, 2], default: 1 },
+    fees: {type:Number, default: 0},// 1 for Day 1, 2 for Day 2
 }, { timestamp: true });
 module.exports = mongoose.model('Event', eventSchema);
 

@@ -45,4 +45,17 @@ const login = async (req, res) => {
     }
 }
 
-module.exports = { register, login };
+const getCurrentUser = async (req, res) => {
+    try {
+        // req.user is set by the auth middleware
+        const user = await User.findById(req.user._id).select('-password');
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+module.exports = { register, login, getCurrentUser };
