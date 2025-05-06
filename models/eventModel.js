@@ -22,7 +22,11 @@ const eventSchema = new mongoose.Schema({
     },
     category: String,
     day: { type: Number, enum: [1, 2], default: 1 },
-    fees: {type:Number, default: 0},// 1 for Day 1, 2 for Day 2
+    fees: { type: Number, default: 0 },// 1 for Day 1, 2 for Day 2
+    registrationOpen: {
+        type: Boolean,
+        default: true
+    }
 }, { timestamp: true });
 module.exports = mongoose.model('Event', eventSchema);
 

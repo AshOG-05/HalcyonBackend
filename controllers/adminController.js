@@ -4,6 +4,8 @@ const Event = require('../models/eventModel');
 const pdf = require('html-pdf');
 const fs = require('fs');
 const path = require('path');
+const Excel = require('exceljs');
+const mongoose = require('mongoose');
 const imagePath = path.join(__dirname, '../resources/image.png');
 let imageBase64 = '';
 
@@ -16,14 +18,14 @@ const getAllUsers = async (req, res) => {
   }
 }
 const getAllRegistrations = async (req, res) => {
-  try{
+  try {
     const registrattions = await Registration.find()
       .populate('event', 'name')
       .populate('teamLeader', 'name mobile email')
       .populate('teamMembers', 'name mobile email');
     if (!registrattions) return res.status(404).json({ error: "No registrations found" });
     res.json(registrattions);
-  }catch(err){
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 }
@@ -218,4 +220,225 @@ const editEvent = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 }
-module.exports = { getAllUsers, getAllRegistrations, assignTeamMember, generatePdf, deleteEvent, editEvent };
+const exportRegistrationsToExcel = async (req, res) => {
+  try {
+    // Create a new Excel workbook
+    const workbook = new Excel.Workbook();
+    workbook.creator = 'Halcyon 2025';
+    workbook.lastModifiedBy = 'Admin Dashboard';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    // No query filters - get all registrations
+    const query = {};
+
+    // Fetch registrations with populated references
+    const registrations = await Registration.find(query)
+      .populate('event', 'name date venue category day fees')
+      .populate('teamLeader', 'name email mobile')
+      .populate('spotRegistration', 'name email mobile')
+      .sort({ 'event.name': 1, registeredAt: 1 });
+
+    if (registrations.length === 0) {
+      return res.status(404).json({ error: "No registrations found" });
+    }
+
+    // Create a worksheet
+    const worksheet = workbook.addWorksheet('Registrations');
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Sl. No.', key: 'slNo', width: 8 },
+      { header: 'Event Name', key: 'eventName', width: 25 },
+      { header: 'Category', key: 'category', width: 15 },
+      { header: 'Day', key: 'day', width: 8 },
+      { header: 'Team Name', key: 'teamName', width: 20 },
+      { header: 'Team Size', key: 'teamSize', width: 10 },
+      { header: 'Participant Name', key: 'leaderName', width: 20 },
+      { header: 'Email', key: 'leaderEmail', width: 25 },
+      { header: 'Mobile', key: 'leaderMobile', width: 15 },
+      { header: 'College', key: 'collegeName', width: 30 },
+      { header: 'USN', key: 'usn', width: 15 },
+      { header: 'Registration Date', key: 'registeredAt', width: 20 },
+      { header: 'Payment Status', key: 'paymentStatus', width: 15 },
+      { header: 'Payment ID', key: 'paymentId', width: 25 },
+      { header: 'Notes', key: 'notes', width: 30 }
+    ];
+
+    // Style the header row
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4F81BD' }
+    };
+    worksheet.getRow(1).font = {
+      color: { argb: 'FFFFFFFF' },
+      bold: true
+    };
+
+    // Add data to the worksheet
+    registrations.forEach((registration, index) => {
+      // Get category name
+      let categoryName = 'Unknown';
+      if (registration.event && registration.event.category) {
+        const category = EVENT_CATEGORIES.find(cat => cat.id === registration.event.category);
+        categoryName = category ? category.label : 'Unknown';
+      }
+
+      // Check if this is a spot registration
+      const isSpotRegistration = registration.spotRegistration !== null;
+
+      // For spot registrations, use the first team member as the participant
+      const participantName = isSpotRegistration && registration.teamMembers && registration.teamMembers.length > 0
+        ? registration.teamMembers[0].name
+        : (registration.teamLeader ? registration.teamLeader.name : 'Unknown');
+
+      const participantEmail = isSpotRegistration && registration.teamMembers && registration.teamMembers.length > 0
+        ? registration.teamMembers[0].email
+        : (registration.teamLeader ? registration.teamLeader.email : 'N/A');
+
+      const participantMobile = isSpotRegistration && registration.teamMembers && registration.teamMembers.length > 0
+        ? registration.teamMembers[0].mobile
+        : (registration.teamLeader ? registration.teamLeader.mobile : 'N/A');
+
+      // Add a note for spot registrations
+      const registrationNote = isSpotRegistration
+        ? `Spot registration by ${registration.spotRegistration ? registration.spotRegistration.name : 'team member'}`
+        : '';
+
+      worksheet.addRow({
+        slNo: index + 1,
+        eventName: registration.event ? registration.event.name : 'Unknown',
+        category: categoryName,
+        day: registration.event ? registration.event.day || 1 : 'N/A',
+        teamName: registration.teamName || 'N/A',
+        teamSize: registration.teamSize || 1,
+        leaderName: participantName,
+        leaderEmail: participantEmail,
+        leaderMobile: participantMobile,
+        collegeName: registration.teamLeaderDetails ? registration.teamLeaderDetails.collegeName : 'N/A',
+        usn: registration.teamLeaderDetails ? registration.teamLeaderDetails.usn : 'N/A',
+        registeredAt: registration.registeredAt ? new Date(registration.registeredAt).toLocaleString() : 'N/A',
+        paymentStatus: registration.paymentStatus || 'N/A',
+        paymentId: registration.paymentId || 'N/A',
+        notes: registrationNote
+      });
+    });
+
+    // Add team members worksheet if there are any
+    const hasTeamMembers = registrations.some(reg => reg.teamMembers && reg.teamMembers.length > 0);
+
+    if (hasTeamMembers) {
+      const teamMembersSheet = workbook.addWorksheet('Team Members');
+
+      // Define columns for team members
+      teamMembersSheet.columns = [
+        { header: 'Sl. No.', key: 'slNo', width: 8 },
+        { header: 'Event Name', key: 'eventName', width: 25 },
+        { header: 'Team Name', key: 'teamName', width: 20 },
+        { header: 'Member Name', key: 'memberName', width: 20 },
+        { header: 'Email', key: 'memberEmail', width: 25 },
+        { header: 'Mobile', key: 'memberMobile', width: 15 },
+        { header: 'College', key: 'memberCollege', width: 30 },
+        { header: 'USN', key: 'memberUsn', width: 15 }
+      ];
+
+      // Style the header row
+      teamMembersSheet.getRow(1).font = { bold: true, size: 12 };
+      teamMembersSheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F81BD' }
+      };
+      teamMembersSheet.getRow(1).font = {
+        color: { argb: 'FFFFFFFF' },
+        bold: true
+      };
+
+      // Add team members data
+      let rowIndex = 1;
+      registrations.forEach(registration => {
+        if (registration.teamMembers && registration.teamMembers.length > 0) {
+          registration.teamMembers.forEach(member => {
+            rowIndex++;
+            teamMembersSheet.addRow({
+              slNo: rowIndex - 1,
+              eventName: registration.event ? registration.event.name : 'Unknown',
+              teamName: registration.teamName || 'N/A',
+              memberName: member.name || 'N/A',
+              memberEmail: member.email || 'N/A',
+              memberMobile: member.mobile || 'N/A',
+              memberCollege: member.collegeName || registration.teamLeaderDetails.collegeName || 'N/A',
+              memberUsn: member.usn || 'N/A'
+            });
+          });
+        }
+      });
+    }
+
+    // Set response headers for Excel download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=Halcyon_All_Registrations.xlsx');
+
+    // Write to response
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting registrations to Excel:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Define EVENT_CATEGORIES constant for use in the Excel export
+const EVENT_CATEGORIES = [
+  { id: 'dance', label: 'Dance', icon: 'fas fa-music' },
+  { id: 'music', label: 'Music', icon: 'fas fa-guitar' },
+  { id: 'gaming', label: 'Gaming', icon: 'fas fa-gamepad' },
+  { id: 'theatre', label: 'Theatre', icon: 'fas fa-theater-masks' },
+  { id: 'finearts', label: 'Fine Arts', icon: 'fas fa-paint-brush' },
+  { id: 'literary', label: 'Literary', icon: 'fas fa-book' }
+];
+
+// Toggle event registration status
+const toggleEventRegistration = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // Validate event ID
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ error: "Invalid event ID format" });
+    }
+
+    // Find the event
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    // Toggle the registration status
+    event.registrationOpen = !event.registrationOpen;
+
+    // Save the updated event
+    await event.save();
+
+    res.json({
+      message: `Registration for event "${event.name}" is now ${event.registrationOpen ? 'open' : 'closed'}`,
+      registrationOpen: event.registrationOpen
+    });
+  } catch (err) {
+    console.error('Error toggling event registration:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = {
+  getAllUsers,
+  getAllRegistrations,
+  assignTeamMember,
+  generatePdf,
+  deleteEvent,
+  editEvent,
+  exportRegistrationsToExcel,
+  toggleEventRegistration
+};

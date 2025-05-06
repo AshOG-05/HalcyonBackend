@@ -54,6 +54,19 @@ const registrationSchema = new mongoose.Schema({
         type:mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
+    },
+    paymentId:{
+        type:String,
+        default: null
+    },
+    orderId:{
+        type:String,
+        default: null
+    },
+    paymentStatus:{
+        type:String,
+        enum: ['pending', 'completed', 'failed', 'not_required'],
+        default: 'pending',
     }
 },{timestamps: true});
 module.exports = mongoose.model('Registration', registrationSchema);
