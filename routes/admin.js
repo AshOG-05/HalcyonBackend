@@ -9,7 +9,8 @@ const {
     deleteEvent,
     editEvent,
     exportRegistrationsToExcel,
-    toggleEventRegistration
+    toggleEventRegistration,
+    deleteRegistration,
 } = require('../controllers/adminController');
 
 
@@ -20,5 +21,5 @@ router.get('/excel', auth, allowedRoles('admin'), exportRegistrationsToExcel);
 router.delete('/event/:id', auth, allowedRoles('admin'), deleteEvent);
 router.put('/event/:id', auth, allowedRoles('admin'), editEvent);
 router.patch('/event/:eventId/toggle-registration', auth, allowedRoles('admin'), toggleEventRegistration);
-
+router.delete('/registration/:id', auth, allowedRoles('admin'), deleteRegistration);
 module.exports = router;

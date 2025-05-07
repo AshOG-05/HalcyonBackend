@@ -19,13 +19,19 @@ const getAllUsers = async (req, res) => {
 }
 const getAllRegistrations = async (req, res) => {
   try {
-    const registrattions = await Registration.find()
-      .populate('event', 'name')
+    const registrations = await Registration.find()
+      .populate('event', 'name date venue category day fees')
       .populate('teamLeader', 'name mobile email')
+      .populate('spotRegistration', 'name email mobile')
       .populate('teamMembers', 'name mobile email');
-    if (!registrattions) return res.status(404).json({ error: "No registrations found" });
-    res.json(registrattions);
+
+    if (!registrations || registrations.length === 0) {
+      return res.status(404).json({ error: "No registrations found" });
+    }
+
+    res.json(registrations);
   } catch (err) {
+    console.error('Error fetching registrations:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -210,7 +216,6 @@ const deleteEvent = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 }
-
 const editEvent = async (req, res) => {
   try {
     const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -302,9 +307,23 @@ const exportRegistrationsToExcel = async (req, res) => {
         ? registration.teamMembers[0].mobile
         : (registration.teamLeader ? registration.teamLeader.mobile : 'N/A');
 
+      // Extract team member info from payment ID for spot registrations
+      let teamMemberName = '';
+      if (isSpotRegistration && registration.spotRegistration) {
+        teamMemberName = registration.spotRegistration.name || '';
+      } else if (isSpotRegistration && registration.paymentId && registration.paymentId.includes('SPOT_PAYMENT_')) {
+        // Try to extract team member name from payment ID format: SPOT_PAYMENT_TeamMemberName_Timestamp
+        const paymentParts = registration.paymentId.split('_');
+        if (paymentParts.length >= 3) {
+          // The format should be ["SPOT", "PAYMENT", "TeamMemberName", "Timestamp"]
+          // If the team member name has underscores, we need to join the parts
+          teamMemberName = paymentParts.slice(2, -1).join('_');
+        }
+      }
+
       // Add a note for spot registrations
       const registrationNote = isSpotRegistration
-        ? `Spot registration by ${registration.spotRegistration ? registration.spotRegistration.name : 'team member'}`
+        ? `Spot registration by ${teamMemberName || registration.spotRegistration?.name || 'team member'}`
         : '';
 
       worksheet.addRow({
@@ -432,6 +451,20 @@ const toggleEventRegistration = async (req, res) => {
   }
 };
 
+const deleteRegistration = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const registration = await Registration.findById(id);
+    if (!registration) return res.status(404).json({ error: "Registration not found" });
+    await Registration.findByIdAndDelete(id);
+    res.json({ message: `Registration with ID ${id} deleted successfully` });
+
+  } catch (err) {
+    console.error('Error deleting registration:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getAllUsers,
   getAllRegistrations,
@@ -440,5 +473,6 @@ module.exports = {
   deleteEvent,
   editEvent,
   exportRegistrationsToExcel,
-  toggleEventRegistration
+  toggleEventRegistration,
+  deleteRegistration
 };
