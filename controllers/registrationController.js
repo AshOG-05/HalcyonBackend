@@ -42,11 +42,21 @@ const registerForEvent = async (req, res) => {
         }
 
         // Validate team size
-        if (event.isVariableTeamSize) {
-            if (teamSize > event.teamSize) {
-                return res.status(400).json({ error: `Team size cannot exceed ${event.teamSize}` });
+        // For team events, always use min and max team sizes if available
+        if (event.teamSize >= 3 || event.isVariableTeamSize) {
+            // Use minTeamSize and maxTeamSize if available, otherwise fall back to teamSize
+            const minSize = event.minTeamSize || event.teamSize;
+            const maxSize = event.maxTeamSize || event.teamSize;
+
+            if (teamSize < minSize) {
+                return res.status(400).json({ error: `Team size cannot be less than ${minSize}` });
+            }
+
+            if (teamSize > maxSize) {
+                return res.status(400).json({ error: `Team size cannot exceed ${maxSize}` });
             }
         } else {
+            // For individual or duo events, use exact team size
             if (teamSize !== event.teamSize) {
                 return res.status(400).json({ error: `Team size must be ${event.teamSize} members` })
             }
@@ -185,6 +195,7 @@ const spotRegistration = async (req, res) => {
             teamMembers,
             teamSize,
             teamLeaderDetails,
+            notes
         } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(eventId)) {
@@ -203,11 +214,21 @@ const spotRegistration = async (req, res) => {
         }
 
         // Validate team size
-        if (event.isVariableTeamSize) {
-            if (teamSize > event.teamSize) {
-                return res.status(400).json({ error: `Team size cannot exceed ${event.teamSize}` });
+        // For team events, always use min and max team sizes if available
+        if (event.teamSize >= 3 || event.isVariableTeamSize) {
+            // Use minTeamSize and maxTeamSize if available, otherwise fall back to teamSize
+            const minSize = event.minTeamSize || event.teamSize;
+            const maxSize = event.maxTeamSize || event.teamSize;
+
+            if (teamSize < minSize) {
+                return res.status(400).json({ error: `Team size cannot be less than ${minSize}` });
+            }
+
+            if (teamSize > maxSize) {
+                return res.status(400).json({ error: `Team size cannot exceed ${maxSize}` });
             }
         } else {
+            // For individual or duo events, use exact team size
             if (teamSize !== event.teamSize) {
                 return res.status(400).json({ error: `Team size must be ${event.teamSize} members` })
             }
@@ -255,7 +276,8 @@ const spotRegistration = async (req, res) => {
             // For spot registrations, include team member info in the payment reference
             paymentId: paymentReference,
             orderId: orderReference,
-            paymentStatus: event.fees > 0 ? 'completed' : 'not_required'
+            paymentStatus: event.fees > 0 ? 'completed' : 'not_required',
+            notes: notes || null // Store payment mode information
         });
 
         res.status(201).json(registration);
