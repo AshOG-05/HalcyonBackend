@@ -1,76 +1,80 @@
 const mongoose = require('mongoose');
 const registrationSchema = new mongoose.Schema({
-    teamName:{
-        type:String,
-        required: function() {return this.teamSize > 2;}
+    teamName: {
+        type: String,
+        required: function() { return this.teamSize > 2; }
     },
-    teamLeader:{
-        type:mongoose.Schema.Types.ObjectId,
+    teamLeader: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
     },
-    teamLeaderDetails:{
-        collegeName:{
-            type:String,
+    teamLeaderDetails: {
+        collegeName: {
+            type: String,
             required: true,
         },
-        usn:{
-            type:String,
-            required:true,
+        usn: {
+            type: String,
+            required: true,
         }
     },
-    teamMembers:[{
-        name:{
-            type:String,
+    teamMembers: [{
+        name: {
+            type: String,
         },
-        email:{
-            type:String,
+        email: {
+            type: String,
         },
-        mobile:{
-            type:String,
+        mobile: {
+            type: String,
         },
-        usn:{
-            type:String,
+        usn: {
+            type: String,
         },
-        collegeName:{
-            type:String,
+        collegeName: {
+            type: String,
         }
     }],
-    teamSize:{
-        type:Number,
+    teamSize: {
+        type: Number,
         required: true,
         default: 1,
     },
-    event:{
-        type:mongoose.Schema.Types.ObjectId,
+    event: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Event',
         required: true
     },
-    registeredAt:{
-        type:Date,
+    registeredAt: {
+        type: Date,
         default: Date.now
     },
-    spotRegistration:{
-        type:mongoose.Schema.Types.ObjectId,
+    spotRegistration: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         default: null
     },
-    paymentId:{
-        type:String,
+    paymentId: {
+        type: String,
         default: null
     },
-    orderId:{
-        type:String,
+    orderId: {
+        type: String,
         default: null
     },
-    transactionId:{
-        type:String,
+    transactionId: {
+        type: String,
         default: null
     },
-    paymentStatus:{
-        type:String,
+    paymentStatus: {
+        type: String,
         enum: ['pending', 'completed', 'failed', 'not_required'],
         default: 'pending',
+    },
+    notes: {
+        type: String,
+        default: null
     }
-},{timestamps: true});
+}, { timestamps: true });
 module.exports = mongoose.model('Registration', registrationSchema);

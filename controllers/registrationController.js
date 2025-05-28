@@ -8,7 +8,13 @@ const registerForEvent = async (req, res) => {
         console.log('User from token:', req.user);
         console.log('Request body:', req.body);
         console.log('Request params:', req.params);
-
+        // Check if user has the correct role for regular registration
+        if (req.user.role !== 'user') {
+            return res.status(403).json({
+                error: "Only regular users can use this endpoint for registration",
+                message: "Team members should use the spot registration endpoint"
+            });
+        }
         const { eventId } = req.params;
         const {
             teamName,
@@ -35,30 +41,33 @@ const registerForEvent = async (req, res) => {
             });
         }
 
-        // Validate team size
-        if (event.minTeamSize && event.maxTeamSize) {
-            // Use min and max team sizes if available
-            if (teamSize < event.minTeamSize || teamSize > event.maxTeamSize) {
-                return res.status(400).json({
-                    error: `Team size must be between ${event.minTeamSize} and ${event.maxTeamSize} members`
-                });
+        // Validate team size - Use improved logic from main branch
+        // For team events, always use min and max team sizes if available
+        if (event.teamSize >= 3 || event.isVariableTeamSize) {
+            // Use minTeamSize and maxTeamSize if available, otherwise fall back to teamSize
+            const minSize = event.minTeamSize || event.teamSize;
+            const maxSize = event.maxTeamSize || event.teamSize;
+
+            if (teamSize < minSize) {
+                return res.status(400).json({ error: `Team size cannot be less than ${minSize}` });
             }
-        } else if (event.isVariableTeamSize) {
-            // Fallback to old logic for backward compatibility
-            if (teamSize > event.teamSize) {
-                return res.status(400).json({ error: `Team size cannot exceed ${event.teamSize}` });
+
+            if (teamSize > maxSize) {
+                return res.status(400).json({ error: `Team size cannot exceed ${maxSize}` });
             }
         } else {
-            // Fixed team size
+            // For individual or duo events, use exact team size
             if (teamSize !== event.teamSize) {
                 return res.status(400).json({ error: `Team size must be ${event.teamSize} members` });
             }
         }
 
+        // Validate team name for larger teams
         if (teamSize > 2 && !teamName) {
             return res.status(400).json({ error: "Team name is required for teams with more than 2 members" });
         }
 
+        // Validate team leader details
         if (!teamLeaderDetails || !teamLeaderDetails.collegeName || !teamLeaderDetails.usn) {
             return res.status(400).json({ error: "Team leader details are required" });
         }
@@ -85,7 +94,7 @@ const registerForEvent = async (req, res) => {
         // Prepare registration data
         const registrationData = {
             event: eventId,
-            teamLeader: req.user._id,
+            teamLeader: req.user._id, // Set the authenticated user as team leader
             teamLeaderDetails: {
                 collegeName: teamLeaderDetails.collegeName,
                 usn: teamLeaderDetails.usn,
@@ -140,9 +149,60 @@ const viewMyRegistration = async (req, res) => {
                 { teamLeader: req.user._id },
                 { spotRegistration: req.user._id }
             ]
-        }).populate('event').populate('teamLeader', 'name email mobile');
+        }).populate('event');
 
-        res.json(registrations);
+        // For regular registrations, populate the teamLeader field
+        // For spot registrations, this might fail since we're using a generated ObjectId
+        try {
+            await Registration.populate(registrations, {
+                path: 'teamLeader',
+                select: 'name email mobile'
+            });
+        } catch (populateErr) {
+            console.log('Error populating teamLeader, this is expected for spot registrations:', populateErr.message);
+        }
+
+        // Populate the spotRegistration field to get team member info
+        try {
+            await Registration.populate(registrations, {
+                path: 'spotRegistration',
+                select: 'name email mobile'
+            });
+        } catch (populateErr) {
+            console.log('Error populating spotRegistration:', populateErr.message);
+        }
+
+        // Process the registrations to add a flag for spot registrations
+        const processedRegistrations = registrations.map(reg => {
+            const regObj = reg.toObject();
+
+            // If this is a spot registration, add a flag and set teamLeader info from the first team member
+            if (reg.spotRegistration) {
+                regObj.isSpotRegistration = true;
+
+                // Add team member info who performed the spot registration
+                regObj.registeredBy = {
+                    name: reg.spotRegistration?.name || 'Unknown Team Member',
+                    email: reg.spotRegistration?.email || 'N/A',
+                    mobile: reg.spotRegistration?.mobile || 'N/A',
+                    id: reg.spotRegistration?._id || null
+                };
+
+                // If there are team members, use the first one's info as the "team leader" for display
+                if (reg.teamMembers && reg.teamMembers.length > 0) {
+                    const firstMember = reg.teamMembers[0];
+                    regObj.displayTeamLeader = {
+                        name: firstMember.name || 'Unknown',
+                        email: firstMember.email || 'N/A',
+                        mobile: firstMember.mobile || 'N/A'
+                    };
+                }
+            }
+
+            return regObj;
+        });
+
+        res.json(processedRegistrations);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
