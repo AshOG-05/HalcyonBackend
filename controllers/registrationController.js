@@ -79,9 +79,19 @@ const registerForEvent = async (req, res) => {
         });
 
         if (existingRegistration) {
-            return res.status(400).json({
+            console.log('Duplicate registration attempt detected:', {
+                userId: req.user._id,
+                eventId: eventId,
+                existingRegistrationId: existingRegistration._id,
+                registrationDate: existingRegistration.createdAt
+            });
+
+            return res.status(409).json({
                 error: 'You have already registered for this event',
-                alreadyRegistered: true
+                alreadyRegistered: true,
+                registrationDate: existingRegistration.createdAt,
+                registrationId: existingRegistration._id,
+                message: 'Duplicate registration is not allowed. Each user can only register once per event.'
             });
         }
 
@@ -129,12 +139,19 @@ const registerForEvent = async (req, res) => {
             });
         }
 
-        // Handle duplicate key errors
+        // Handle duplicate key errors (database-level constraint)
         if (err.code === 11000) {
-            console.error('Duplicate key error:', err);
-            return res.status(400).json({
-                error: 'Duplicate registration detected',
-                details: err.message
+            console.error('Database duplicate key error - user attempted to register twice:', {
+                userId: req.user._id,
+                eventId: req.params.eventId,
+                error: err.message
+            });
+
+            return res.status(409).json({
+                error: 'You have already registered for this event',
+                alreadyRegistered: true,
+                message: 'Duplicate registration prevented by database constraint. Each user can only register once per event.',
+                details: 'This error occurred at the database level, indicating a duplicate registration attempt.'
             });
         }
 

@@ -77,4 +77,9 @@ const registrationSchema = new mongoose.Schema({
         default: null
     }
 }, { timestamps: true });
+
+// Create a compound unique index to prevent duplicate registrations
+// This ensures that the same user (teamLeader) cannot register for the same event twice
+registrationSchema.index({ event: 1, teamLeader: 1 }, { unique: true });
+
 module.exports = mongoose.model('Registration', registrationSchema);

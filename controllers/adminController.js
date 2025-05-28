@@ -23,7 +23,8 @@ const getAllRegistrations = async (req, res) => {
       .populate('event', 'name date venue category day fees')
       .populate('teamLeader', 'name mobile email')
       .populate('spotRegistration', 'name email mobile')
-      .populate('teamMembers', 'name mobile email');
+      .populate('teamMembers', 'name mobile email')
+      .populate('teamLeader', 'name email mobile transactionId') ;
 
     if (!registrations || registrations.length === 0) {
       return res.status(404).json({ error: "No registrations found" });
@@ -35,6 +36,7 @@ const getAllRegistrations = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 }
+
 const assignTeamMember = async (req, res) => {
   try {
     const { eventId, userId } = req.params;
