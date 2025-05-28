@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const registrationSchema = new mongoose.Schema({
     teamName:{
         type:String,
-        required: function() {return this.teamMembers.length > 2;}
+        required: function() {return this.teamSize > 2;}
     },
     teamLeader:{
         type:mongoose.Schema.Types.ObjectId,
@@ -44,7 +44,7 @@ const registrationSchema = new mongoose.Schema({
     event:{
         type:mongoose.Schema.Types.ObjectId,
         ref: 'Event',
-        required:'True'
+        required: true
     },
     registeredAt:{
         type:Date,
@@ -60,6 +60,10 @@ const registrationSchema = new mongoose.Schema({
         default: null
     },
     orderId:{
+        type:String,
+        default: null
+    },
+    transactionId:{
         type:String,
         default: null
     },
